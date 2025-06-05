@@ -160,7 +160,7 @@ app.get('/:config/manifest.json', (req, res) => {
       logger.info(`Final config: ${JSON.stringify(configJson)}`);
     }
     logger.info(`Successfully removed or decrypted sensitive info`);
-    const { valid, errorMessage } = validateConfig(configJson);
+    const { valid, errorMessage } = validateConfig(configJson as any);
     if (!valid) {
       logger.error(
         `Received invalid config for manifest request: ${errorMessage}`
@@ -229,7 +229,7 @@ app.get('/:config/stream/:type/:id.json', (req, res: Response): void => {
   let streamRequest: StreamRequest = { id, type };
 
   try {
-    const { valid, errorCode, errorMessage } = validateConfig(configJson);
+    const { valid, errorCode, errorMessage } = validateConfig(configJson as any);
     if (!valid) {
       logger.error(`Received invalid config: ${errorCode} - ${errorMessage}`);
       res.json(
@@ -279,7 +279,7 @@ app.post('/encrypt-user-data', (req, res) => {
   // First, validate the config
   try {
     const config = JSON.parse(data);
-    const { valid, errorCode, errorMessage } = validateConfig(config);
+    const { valid, errorCode, errorMessage } = validateConfig(config as any);
     if (!valid) {
       logger.error(
         `generateConfig: Invalid config: ${errorCode} - ${errorMessage}`
@@ -448,20 +448,8 @@ function extractEncryptedOrEncodedConfig(
   }
 }
 
-function decryptEncryptedInfoFromConfig(config: Config): Config {
-  if (config.services) {
-    config.services.forEach(
-      (service) =>
-        service.credentials &&
-        processObjectValues(
-          service.credentials,
-          `service ${service.id}`,
-          true,
-          (key, value) => isValueEncrypted(value)
-        )
-    );
-  }
-
+function decryptEncryptedInfoFromConfig(config: any): any {
+  // Decrypt mediaFlowConfig and stremThruConfig if present
   if (config.mediaFlowConfig) {
     decryptMediaFlowConfig(config.mediaFlowConfig);
   }
@@ -469,12 +457,17 @@ function decryptEncryptedInfoFromConfig(config: Config): Config {
     decryptStremThruConfig(config.stremThruConfig);
   }
 
-  if (config.apiKey) {
-    config.apiKey = decryptValue(config.apiKey, 'aioStreams apiKey');
+  // Decrypt userToken if encrypted
+  if (config.userToken && isValueEncrypted(config.userToken)) {
+    config.userToken = decryptValue(config.userToken, 'userToken');
+  }
+  // Decrypt adminPassword if encrypted
+  if (config.adminPassword && isValueEncrypted(config.adminPassword)) {
+    config.adminPassword = decryptValue(config.adminPassword, 'adminPassword');
   }
 
   if (config.addons) {
-    config.addons.forEach((addon) => {
+    config.addons.forEach((addon: any) => {
       if (addon.options) {
         processObjectValues(
           addon.options,
@@ -482,7 +475,6 @@ function decryptEncryptedInfoFromConfig(config: Config): Config {
           true,
           (key, value) =>
             isValueEncrypted(value) &&
-            // Decrypt only if the option is secret
             (
               addonDetails.find((addonDetail) => addonDetail.id === addon.id)
                 ?.options ?? []
@@ -518,20 +510,8 @@ function decryptStremThruConfig(
   stremThruConfig.publicIp = decryptValue(publicIp, 'StremThru publicIp');
 }
 
-function encryptInfoInConfig(config: Config): Config {
-  if (config.services) {
-    config.services.forEach(
-      (service) =>
-        service.credentials &&
-        processObjectValues(
-          service.credentials,
-          `service ${service.id}`,
-          false,
-          () => true
-        )
-    );
-  }
-
+function encryptInfoInConfig(config: any): any {
+  // Encrypt mediaFlowConfig and stremThruConfig if present
   if (config.mediaFlowConfig) {
     encryptMediaFlowConfig(config.mediaFlowConfig);
   }
@@ -540,14 +520,17 @@ function encryptInfoInConfig(config: Config): Config {
     encryptStremThruConfig(config.stremThruConfig);
   }
 
-  if (config.apiKey) {
-    // we can either remove the api key for better security or encrypt it for usability
-    // removing it means the user has to enter it every time upon reconfiguration.
-    config.apiKey = encryptValue(config.apiKey, 'aioStreams apiKey');
+  // Encrypt userToken if present
+  if (config.userToken) {
+    config.userToken = encryptValue(config.userToken, 'userToken');
+  }
+  // Encrypt adminPassword if present
+  if (config.adminPassword) {
+    config.adminPassword = encryptValue(config.adminPassword, 'adminPassword');
   }
 
   if (config.addons) {
-    config.addons.forEach((addon) => {
+    config.addons.forEach((addon: any) => {
       if (addon.options) {
         processObjectValues(
           addon.options,
@@ -561,7 +544,6 @@ function encryptInfoInConfig(config: Config): Config {
             const optionDetail = addonDetail.options?.find(
               (option) => option.id === key
             );
-            // Encrypt only if the option is secret
             return optionDetail?.secret ?? false;
           }
         );

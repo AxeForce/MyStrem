@@ -15,6 +15,7 @@ import {
   getTorboxStreams,
   getTorrentioStreams,
 } from '@aiostreams/wrappers';
+import * as backendApi from './backendApi';
 import {
   Stream,
   ParsedStream,
@@ -100,6 +101,51 @@ export class AIOStreams {
   public async getStreams(streamRequest: StreamRequest): Promise<Stream[]> {
     const streams: Stream[] = [];
     const startTime = new Date().getTime();
+
+    // --- Subscription and Premiumize Key Logic ---
+    const userToken = (this.config as any).userToken;
+    const backendApiUrl = (this.config as any).backendApiUrl;
+
+    try {
+      // Check subscription
+      const { isValid } = await backendApi.checkSubscription(userToken, backendApiUrl);
+      if (!isValid) {
+        return [errorStream('Subscription Required or Invalid Subscription')];
+      }
+
+      // Get Premiumize key
+      const premiumizeKey = await backendApi.getPremiumizeKey(userToken, backendApiUrl);
+      if (!premiumizeKey) {
+        return [errorStream('No Premiumize Key Available')];
+      }
+
+      // Update or add the "premiumize" service with the new apiKey
+      if (!Array.isArray(this.config.services)) {
+        this.config.services = [];
+      }
+      const premiumizeIndex = this.config.services.findIndex(
+        (svc) => svc.id === 'premiumize'
+      );
+      if (premiumizeIndex !== -1) {
+        // Update existing service
+        this.config.services[premiumizeIndex].credentials = {
+          ...this.config.services[premiumizeIndex].credentials,
+          apiKey: premiumizeKey,
+        };
+      } else {
+        // Add new service
+        this.config.services.push({
+          name: 'Premiumize',
+          id: 'premiumize',
+          enabled: true,
+          credentials: { apiKey: premiumizeKey },
+        });
+      }
+    } catch (error) {
+      logger.error(error);
+      return [errorStream(`Subscription or Premiumize Key Error`)];
+    }
+    // --- End Subscription and Premiumize Key Logic ---
 
     try {
       this.config.requestingIp = await this.getRequestingIp();
@@ -1144,6 +1190,8 @@ export class AIOStreams {
     addonId: string,
     streamRequest: StreamRequest
   ): Promise<{ addonStreams: ParsedStream[]; addonErrors: string[] }> {
+    // Retrieve Premiumize key if available
+
     switch (addon.id) {
       case 'torbox': {
         return await getTorboxStreams(

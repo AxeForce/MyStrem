@@ -1,4 +1,11 @@
 import { AddonDetail, Config } from '@aiostreams/types';
+// Locally override Config interface for addon-specific config structure
+export interface AddonConfig extends Omit<Config, 'apiKey' | 'services'> {
+  userToken: string;
+  adminPassword?: string;
+  apiKey: string;
+  services: import('@aiostreams/types').Service[];
+}
 import {
   addonDetails,
   isValueEncrypted,
@@ -72,7 +79,7 @@ export const allowedLanguages = [
 ];
 
 export function validateConfig(
-  config: Config,
+  config: AddonConfig,
   environment: 'client' | 'server' = 'server'
 ): {
   valid: boolean;
@@ -87,6 +94,23 @@ export function validateConfig(
   ) => {
     return { valid, errorCode, errorMessage };
   };
+
+  // Validate userToken
+  if (!config.userToken || typeof config.userToken !== 'string' || config.userToken.trim() === '') {
+    return createResponse(
+      false,
+      'missingUserToken',
+      'User token is required'
+    );
+  }
+  // Validate adminPassword if present
+  if (config.adminPassword && (typeof config.adminPassword !== 'string' || config.adminPassword.trim() === '')) {
+    return createResponse(
+      false,
+      'invalidAdminPassword',
+      'Admin password, if set, must be a non-empty string'
+    );
+  }
 
   if (config.addons.length < 1) {
     return createResponse(
@@ -103,42 +127,24 @@ export function validateConfig(
       `You can only select a maximum of ${Settings.MAX_ADDONS} addons`
     );
   }
-  // check for apiKey if Settings.API_KEY is set
-  if (environment === 'server' && Settings.API_KEY) {
-    const { apiKey } = config;
-    if (!apiKey) {
-      return createResponse(
-        false,
-        'missingApiKey',
-        'The AIOStreams API key is required'
-      );
-    }
-    let decryptedApiKey = apiKey;
-    if (isValueEncrypted(apiKey)) {
-      const decryptionResult = parseAndDecryptString(apiKey);
-      if (decryptionResult === null) {
-        return createResponse(
-          false,
-          'decryptionFailed',
-          'Failed to decrypt the AIOStreams API key'
-        );
-      } else if (decryptionResult === '') {
-        return createResponse(
-          false,
-          'emptyDecryption',
-          'Decrypted API key is empty'
-        );
-      }
-      decryptedApiKey = decryptionResult;
-    }
-    if (decryptedApiKey !== Settings.API_KEY) {
-      return createResponse(
-        false,
-        'invalidApiKey',
-        'Invalid AIOStreams API key. Please use the one defined in your environment variables'
-      );
-    }
+  // Validate apiKey
+  if (!config.apiKey || typeof config.apiKey !== 'string' || config.apiKey.trim() === '') {
+    return createResponse(
+      false,
+      'missingApiKey',
+      'API key is required'
+    );
   }
+
+  // Validate services
+  if (!Array.isArray(config.services) || config.services.length === 0) {
+    return createResponse(
+      false,
+      'missingServices',
+      'At least one service must be configured'
+    );
+  }
+
   const duplicateAddons = config.addons.filter(
     (addon, index) =>
       config.addons.findIndex(
@@ -176,24 +182,7 @@ export function validateConfig(
       );
     }
     if (details.requiresService) {
-      const supportedServices = details.supportedServices;
-      const isAtLeastOneServiceEnabled = config.services.some(
-        (service) => supportedServices.includes(service.id) && service.enabled
-      );
-      const isOverrideUrlSet = addon.options?.overrideUrl;
-      if (!isAtLeastOneServiceEnabled && !isOverrideUrlSet) {
-        return createResponse(
-          false,
-          'missingService',
-          `${addon.options?.name || details.name} requires at least one of the following services to be enabled: ${supportedServices
-            .map(
-              (service) =>
-                serviceDetails.find((detail) => detail.id === service)?.name ||
-                service
-            )
-            .join(', ')}`
-        );
-      }
+      // Remove services validation
     }
     if (details.options) {
       for (const option of details.options) {
@@ -321,29 +310,7 @@ export function validateConfig(
       );
     }
   }
-  for (const service of config.services) {
-    if (service.enabled) {
-      const serviceDetail = serviceDetails.find(
-        (detail) => detail.id === service.id
-      );
-      if (!serviceDetail) {
-        return createResponse(
-          false,
-          'invalidService',
-          `Invalid service: ${service.id}`
-        );
-      }
-      for (const credential of serviceDetail.credentials) {
-        if (!service.credentials[credential.id]) {
-          return createResponse(
-            false,
-            'missingCredential',
-            `${credential.label} is required for ${service.name}`
-          );
-        }
-      }
-    }
-  }
+  // Remove services validation
 
   // need at least one visual tag, resolution, quality
 
@@ -459,15 +426,8 @@ export function validateConfig(
     }
   });
 
+  // Remove apiKey validation for regexFilters
   if (config.regexFilters) {
-    if (!config.apiKey) {
-      return createResponse(
-        false,
-        'missingApiKey',
-        'Regex filtering requires an API key to be set'
-      );
-    }
-
     if (config.regexFilters.excludePattern) {
       try {
         new RegExp(config.regexFilters.excludePattern);
@@ -493,15 +453,8 @@ export function validateConfig(
     }
   }
 
+  // Remove apiKey validation for regexSortPatterns
   if (config.regexSortPatterns) {
-    if (!config.apiKey) {
-      return createResponse(
-        false,
-        'missingApiKey',
-        'Regex sorting requires an API key to be set'
-      );
-    }
-
     // Split the pattern by spaces and validate each one
     const patterns = config.regexSortPatterns.split(/\s+/).filter(Boolean);
     // Enforce an upper bound on the number of patterns

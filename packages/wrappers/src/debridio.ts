@@ -107,17 +107,30 @@ export async function getDebridioStreams(
         'Debrid service not found for ' + debridioOptions.prioritiseDebrid
       );
     }
-    if (!debridService.credentials.apiKey) {
-      throw new Error(
-        'Debrid service API key not found for ' +
-          debridioOptions.prioritiseDebrid
+    // Retrieve apiKey for the selected service
+    let apiKeyToUse: string | undefined;
+    if (debridioOptions.prioritiseDebrid === 'premiumize') {
+      const premiumizeService = config.services.find(
+        (service) => service.id === 'premiumize'
       );
+      if (!premiumizeService || !premiumizeService.credentials?.apiKey) {
+        throw new Error('Premiumize API key not found in config.services');
+      }
+      apiKeyToUse = premiumizeService.credentials.apiKey;
+    } else {
+      if (!debridService.credentials.apiKey) {
+        throw new Error(
+          'Debrid service API key not found for ' +
+            debridioOptions.prioritiseDebrid
+        );
+      }
+      apiKeyToUse = debridService.credentials.apiKey;
     }
 
     // get the comet config and b64 encode it
     const debridioConfigString = getDebridioConfigString(
       debridioOptions.prioritiseDebrid,
-      debridService.credentials.apiKey
+      apiKeyToUse
     );
 
     const debridio = new Debridio(
@@ -144,9 +157,19 @@ export async function getDebridioStreams(
     logger.info(`Getting Debridio streams for ${service.name}`, {
       func: 'debridio',
     });
+    // Retrieve apiKey for the current service
+    let apiKeyToUse: string | undefined;
+    if (service.id === 'premiumize') {
+      if (!service.credentials?.apiKey) {
+        throw new Error('Premiumize API key not found in config.services');
+      }
+      apiKeyToUse = service.credentials.apiKey;
+    } else {
+      apiKeyToUse = service.credentials.apiKey;
+    }
     const debridioConfigString = getDebridioConfigString(
       service.id,
-      service.credentials.apiKey
+      apiKeyToUse
     );
     const debridio = new Debridio(
       debridioConfigString,

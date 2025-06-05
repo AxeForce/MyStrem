@@ -137,8 +137,17 @@ export interface CustomFormatter {
   description?: string;
 }
 
+export interface Service {
+  name: string;
+  id: string;
+  enabled: boolean;
+  credentials: { [key: string]: string };
+}
+
 export interface Config {
-  apiKey?: string;
+  userToken: string;
+  adminPassword?: string;
+  apiKey: string;
   overrideName?: string;
   requestingIp?: string;
   resolutions: Resolution[];
@@ -187,12 +196,7 @@ export interface Config {
     id: string;
     options: { [key: string]: string | undefined };
   }[];
-  services: {
-    name: string;
-    id: string;
-    enabled: boolean;
-    credentials: { [key: string]: string };
-  }[];
+  services: Service[];
   /** Space-separated regex patterns to sort streams by. Streams will be sorted based on the order of matching patterns. */
   regexSortPatterns?: string;
 }

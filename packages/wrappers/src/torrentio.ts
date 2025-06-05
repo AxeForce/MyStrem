@@ -101,13 +101,26 @@ export async function getTorrentioStreams(
 
   // otherwise, depending on the configuration, create multiple instances of torrentio or use a single instance with all services
   const addonErrors: string[] = [];
+  // Returns the service pair string for Torrentio config.
+  /**
+   * Returns the service pair string for Torrentio config.
+   * For Premiumize, always use the key from the "premiumize" service's apiKey in config.services.
+   */
   const getServicePair = (
     serviceId: string,
     credentials: { [key: string]: string }
   ) => {
-    return serviceId === 'putio'
-      ? `${serviceId}=${credentials.clientId}@${credentials.token}`
-      : `${serviceId}=${credentials.apiKey}`;
+    if (serviceId === 'putio') {
+      return `${serviceId}=${credentials.clientId}@${credentials.token}`;
+    }
+    if (serviceId === 'premiumize') {
+      // Find the premiumize service in config.services and use its apiKey
+      const premiumizeService = config.services.find(
+        (service) => service.id === 'premiumize'
+      );
+      return `${serviceId}=${premiumizeService?.credentials?.apiKey || ''}`;
+    }
+    return `${serviceId}=${credentials.apiKey}`;
   };
 
   if (torrentioOptions.useMultipleInstances === 'true') {
